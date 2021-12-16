@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from enum import Enum
 import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
 
 
 class Theta(Enum):
@@ -42,7 +43,9 @@ class MultipleLinearRegression:
             self.minimize_thetas(r_var_ind=r_var_ind)
             # Compare to numpy solution.
             fit = np.polyfit(self.data.iloc[:, self.ref_r_var_ind], self.data.iloc[:, r_var_ind], 1)
-            print('Numpy solution:\nintercept: %s\tslope: %s' %(fit[1], fit[0]))
+            print('Numpy solution:\nintercept: %s\tslope: %s' % (fit[1], fit[0]))
+            # Compare to sklearn solution
+            self.plot_sklearn_model(r_var_ind=r_var_ind)
 
     def minimize_thetas(self, r_var_ind: int):
         """
@@ -150,9 +153,23 @@ class MultipleLinearRegression:
             fig.show()
         return cost, gradient
 
+    def plot_sklearn_model(self, r_var_ind: int):
+        x = np.array([self.data.iloc[:, self.ref_r_var_ind], self.data.iloc[:, r_var_ind]]).T
+        y = np.dot(x, np.array([0, 1]))
+        reg = LinearRegression().fit(x, y)
+        fig, ax = plt.subplots()
+        ax.scatter(x[:, 0], x[:, 1], color='grey')
+        ax.set(
+            title='Sklearn Regression Model',
+            xlabel='Random Variable 1',
+            ylabel='Random Variable %s' % (r_var_ind + 1)
+        )
+        ax.plot(x[:, 0], reg.predict(x), color='red')
+        fig.show()
+
 
 if __name__ == '__main__':
-    mlr = MultipleLinearRegression('./data/high_dim.csv', ref_r_var_ind=0, transpose_data=True)
+    mlr = MultipleLinearRegression('./data/high_dim.csv', ref_r_var_ind=0, transpose_data=True, use_test_data=True)
     # Summarize input data
     print(mlr.data.head(3))
     # Find the best-fitting regression line, using alpha as the learning rate
