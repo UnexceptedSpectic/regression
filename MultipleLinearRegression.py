@@ -12,13 +12,14 @@ class Theta(Enum):
 
 class MultipleLinearRegression:
 
-    def __init__(self, data_filepath: str, ref_r_var_ind: int, transpose_data: bool = False, use_test_data: bool = False):
+    def __init__(self, data_filepath: str, ref_r_var_ind: int, transpose_data: bool = False,
+                 use_test_data: bool = False):
         # pyplot config
         plt.rcParams.update({'figure.figsize': (10, 8), 'figure.dpi': 100})
         # Load data
         if use_test_data:
             x = np.array([i for i in range(250)])
-            y = -4.756 * x + -3.214 + np.random.normal(0, 100, 250)
+            y = -4.756 * x + -3.214 + np.random.normal(0, 50, 250)
             self.data = pd.DataFrame(np.array([x, y]))
         else:
             self.data = pd.read_csv(data_filepath, header=0, index_col=0)
@@ -60,8 +61,10 @@ class MultipleLinearRegression:
         td_thetas_cost = [y_max, float(0), None]
         bu_thetas_cost = [y_min, float(0), None]
         m_y_thetas_cost = [np.mean([y_max, y_min]), float(0), None]
-        for approach_ind, (int_theta, slope_theta, cost) in enumerate([td_thetas_cost, bu_thetas_cost, m_y_thetas_cost]):
-            for theta_being_optimized in [Theta.SLOPE, Theta.INTERCEPT] * 30:
+        optimization_cycles = 15
+        for approach_ind, (int_theta, slope_theta, cost) in enumerate(
+                [td_thetas_cost, bu_thetas_cost, m_y_thetas_cost]):
+            for cycle_ind, theta_being_optimized in enumerate([Theta.SLOPE, Theta.INTERCEPT] * optimization_cycles):
                 # Track how many optimization steps are required to minimize the cost function.
                 n_iterations = 0
                 # Initialize variables for cost function minimization
@@ -72,7 +75,8 @@ class MultipleLinearRegression:
                 while np.abs(cost - previous_cost) > 1e-3:
                     n_iterations += 1
                     previous_cost, gradient = self.get_cost_and_gradient(
-                        r_var_ind=r_var_ind, slope_theta=slope_theta, approach_ind=approach_ind, int_theta=int_theta
+                        r_var_ind=r_var_ind, slope_theta=slope_theta, approach=approach_ind + 1, cycle=cycle_ind + 1,
+                        iteration=n_iterations, int_theta=int_theta
                     )
                     if theta_being_optimized == Theta.SLOPE:
                         gradient = np.dot(gradient, self.data.iloc[:, self.ref_r_var_ind])
@@ -92,7 +96,8 @@ class MultipleLinearRegression:
                     elif theta_being_optimized == Theta.INTERCEPT:
                         int_theta -= step
                     cost, _ = self.get_cost_and_gradient(
-                        r_var_ind, slope_theta=slope_theta, int_theta=int_theta, approach_ind=approach_ind, plot=False
+                        r_var_ind=r_var_ind, slope_theta=slope_theta, int_theta=int_theta, approach=approach_ind + 1,
+                        cycle=cycle_ind + 1, iteration=n_iterations, plot=False
                     )
                     if cost > previous_cost:
                         # Revert to previous values
@@ -102,17 +107,17 @@ class MultipleLinearRegression:
                         elif theta_being_optimized == Theta.INTERCEPT:
                             int_theta += step
                         break
-                    # self.get_cost_and_gradient(r_var_ind, slope_theta=slope_theta, int_theta=int_theta, plot=True)
                 if approach_ind == 0:
                     td_thetas_cost = int_theta, slope_theta, cost
                 elif approach_ind == 1:
                     bu_thetas_cost = int_theta, slope_theta, cost
                 elif approach_ind == 2:
                     m_y_thetas_cost = int_theta, slope_theta, cost
-                # print('%s number %s found to be %s after %s iterations'
-                #       % (theta_being_optimized, r_var_ind, int_theta, n_iterations))
+                print('%s number %s found to be %s after %s iterations'
+                      % (theta_being_optimized, r_var_ind, int_theta, n_iterations))
             self.get_cost_and_gradient(
-                r_var_ind, slope_theta=slope_theta, int_theta=int_theta, approach_ind=approach_ind, plot=True
+                r_var_ind, slope_theta=slope_theta, int_theta=int_theta, approach=approach_ind + 1, cycle=cycle_ind + 1,
+                iteration=n_iterations, plot=True
             )
         print('Summary of the different starting intercept theta approaches:')
         print('max(y):\t\tintercept: %s\tslope: %s\tcost: %s' % td_thetas_cost)
@@ -123,8 +128,8 @@ class MultipleLinearRegression:
         self.slope_thetas[r_var_ind - 1] = best_result[1]
         print('Best result:\nintercept: %s\tslope: %s\tcost: %s)' % best_result)
 
-    def get_cost_and_gradient(self, r_var_ind: int, slope_theta: float, int_theta: float, approach_ind: int,
-                              plot: bool = False) -> (int, int):
+    def get_cost_and_gradient(self, r_var_ind: int, slope_theta: float, int_theta: float, approach: int, cycle: int,
+                              iteration: int, plot: bool = False, save: bool = False) -> (int, int):
         """
         Determine the cost and gradient of the model between a reference dimension defined by self.ref_r_var_ind and
         another dimension as defined by the input r_var_ind. The cost function is the sum of least squares, scaled by
@@ -145,12 +150,26 @@ class MultipleLinearRegression:
             fig, ax = plt.subplots()
             ax.scatter(self.data.iloc[:, self.ref_r_var_ind], self.data.iloc[:, r_var_ind], color='grey')
             ax.set(
-                title='Raw Data vs Regression Model (Approach %s)' % (approach_ind + 1),
+                title='Raw Data vs Regression Model (Approach %s, Cycle %s, Step %s)' % (
+                    approach,
+                    cycle,
+                    iteration
+                ),
                 xlabel='Reference Random Variable (%s)' % (self.ref_r_var_ind + 1),
                 ylabel='Random Variable %s' % (r_var_ind + 1)
             )
             ax.plot(self.data.iloc[:, self.ref_r_var_ind], model, color='red')
-            fig.show()
+            if save:
+                fig.savefig('./figures/%s-%s_%s-%s-%s.png' %
+                            (self.ref_r_var_ind + 1,
+                             r_var_ind + 1,
+                             approach,
+                             cycle,
+                             iteration)
+                            )
+            else:
+                fig.show()
+            plt.close(fig)
         return cost, gradient
 
     def plot_sklearn_model(self, r_var_ind: int):
